@@ -11,6 +11,7 @@ DEBIAN_FRONTEND=noninteractive \
 apt-get install -y \
   imagemagick \
   file \
+  gosu \
   sudo \
   net-tools \
   iputils-ping \
@@ -30,17 +31,28 @@ apt-get install -y \
   libpcap0.8 \
   libnuma1 \
   libcap2-bin \
+  openssl \
   ${EXTRA_DEB_PACKAGES}
 
 # Clean up APT when done
 apt-get clean
 
-# Download and install patched knockd
-curl -fsSL -o /tmp/knock.tar.gz https://github.com/Metalcape/knock/releases/download/0.8.1/knock-0.8.1-$TARGET.tar.gz
-tar -xf /tmp/knock.tar.gz -C /usr/local/ && rm /tmp/knock.tar.gz
-ln -s /usr/local/sbin/knockd /usr/sbin/knockd
-setcap cap_net_raw=ep /usr/local/sbin/knockd
-find /usr/lib -name 'libpcap.so.0.8' -execdir cp '{}' libpcap.so.1 \;
+if [[ "${SKIP_KNOCKD:-false}" == "true" ]]; then
+  cat > /usr/local/sbin/knockd <<'EOF'
+#!/bin/sh
+echo "knockd is not available in this RISC-V bootstrap image" >&2
+exit 127
+EOF
+  chmod 755 /usr/local/sbin/knockd
+  ln -s /usr/local/sbin/knockd /usr/sbin/knockd
+else
+  # Download and install patched knockd
+  curl -fsSL -o /tmp/knock.tar.gz https://github.com/Metalcape/knock/releases/download/0.8.1/knock-0.8.1-$TARGET.tar.gz
+  tar -xf /tmp/knock.tar.gz -C /usr/local/ && rm /tmp/knock.tar.gz
+  ln -s /usr/local/sbin/knockd /usr/sbin/knockd
+  setcap cap_net_raw=ep /usr/local/sbin/knockd
+  find /usr/lib -name 'libpcap.so.0.8' -execdir cp '{}' libpcap.so.1 \;
+fi
 
 # Set git credentials globally
 cat <<EOF >> /etc/gitconfig

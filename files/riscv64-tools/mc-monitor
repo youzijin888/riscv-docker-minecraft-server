@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+
+command="${1:-}"
+shift || true
+
+if [[ "$command" != "status" ]]; then
+  echo "mc-monitor shim: only 'status' is implemented in the RISC-V bootstrap image" >&2
+  exit 64
+fi
+
+host="localhost"
+port="25565"
+timeout_seconds="5"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host)
+      host="$2"
+      shift 2
+      ;;
+    --port)
+      port="$2"
+      shift 2
+      ;;
+    --timeout)
+      timeout_seconds="${2%s}"
+      shift 2
+      ;;
+    --use-old-server-list-ping|--use-server-list-ping|--use-proxy)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if timeout "$timeout_seconds" bash -c ":</dev/tcp/${host}/${port}" 2>/dev/null; then
+  echo "server is reachable at ${host}:${port}"
+  exit 0
+fi
+
+echo "server is not reachable at ${host}:${port}" >&2
+exit 1

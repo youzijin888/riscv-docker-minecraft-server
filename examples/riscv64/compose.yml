@@ -1,20 +1,18 @@
 services:
   mc:
     image: riscv64-minecraft-server:local
+    ports:
+      - "25565:25565"
     environment:
-      EULA: "true"
-      TYPE: "PAPER"
+      EULA: "TRUE"
+      TYPE: "VANILLA"
       VERSION: "LATEST"
       MEMORY: "2G"
       ONLINE_MODE: "false"
-    ports:
-      - "25565:25565"
     security_opt:
       - seccomp=unconfined
     volumes:
-      - data:/data
+      - ./data:/data
     stdin_open: true
     tty: true
     restart: unless-stopped
-volumes:
-  data: {}

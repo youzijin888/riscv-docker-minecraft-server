@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+bootstrap=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stop-duration|--named-pipe|--stop-server-announce-delay)
+      shift 2
+      ;;
+    --bootstrap)
+      bootstrap="$2"
+      shift 2
+      ;;
+    --remote-console)
+      shift
+      ;;
+    --shell)
+      shell="$2"
+      shift 2
+      exec "$shell" "$@"
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "mc-server-runner shim: unsupported option $1" >&2
+      exit 64
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  echo "mc-server-runner shim: missing command" >&2
+  exit 64
+fi
+
+if [[ -n "$bootstrap" && -f "$bootstrap" ]]; then
+  exec "$@" < "$bootstrap"
+fi
+
+exec "$@"

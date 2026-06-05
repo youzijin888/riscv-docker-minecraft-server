@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "restify is not available in this RISC-V bootstrap image yet" >&2
+exit 127

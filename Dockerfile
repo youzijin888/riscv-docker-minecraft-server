@@ -1,58 +1,36 @@
-ARG BASE_IMAGE=eclipse-temurin:25-jre
+ARG BASE_IMAGE=riscv64/eclipse-temurin:25-jre
 FROM ${BASE_IMAGE}
 
 # hook into docker BuildKit --platform support
 # see https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
-ARG TARGETOS
-ARG TARGETARCH
-ARG TARGETVARIANT
+ARG TARGETOS=linux
+ARG TARGETARCH=riscv64
+ARG TARGETVARIANT=
 
 # The following three arg/env vars get used by the platform specific "install-packages" script
 ARG EXTRA_DEB_PACKAGES=""
 ARG EXTRA_DNF_PACKAGES=""
 ARG EXTRA_ALPINE_PACKAGES=""
 ARG FORCE_INSTALL_PACKAGES=1
-RUN --mount=target=/build,source=build \
-    TARGET=${TARGETARCH}${TARGETVARIANT} \
+ARG SKIP_KNOCKD=true
+COPY build /build
+RUN chmod +x /build/run.sh /build/ubuntu/*.sh /build/alpine/*.sh /build/ol/*.sh \
+    && TARGET=${TARGETARCH}${TARGETVARIANT} \
+    SKIP_KNOCKD=${SKIP_KNOCKD} \
     /build/run.sh install-packages
-COPY --from=tianon/gosu /gosu /usr/local/bin/
 
-RUN --mount=target=/build,source=build \
-    /build/run.sh setup-user
+RUN /build/run.sh setup-user
 
 EXPOSE 25565
 
 ARG APPS_REV=1
 ARG GITHUB_BASEURL=https://github.com
 
-# renovate: datasource=github-releases packageName=itzg/easy-add
-ARG EASY_ADD_VERSION=0.8.13
-ADD ${GITHUB_BASEURL}/itzg/easy-add/releases/download/${EASY_ADD_VERSION}/easy-add_${TARGETOS}_${TARGETARCH}${TARGETVARIANT} /usr/bin/easy-add
-RUN chmod +x /usr/bin/easy-add
-
-# renovate: datasource=github-releases packageName=itzg/restify
-ARG RESTIFY_VERSION=1.7.14
-RUN easy-add --var os=${TARGETOS} --var arch=${TARGETARCH}${TARGETVARIANT} \
-  --var version=${RESTIFY_VERSION} --var app=restify --file {{.app}} \
-  --from ${GITHUB_BASEURL}/itzg/{{.app}}/releases/download/{{.version}}/{{.app}}_{{.version}}_{{.os}}_{{.arch}}.tar.gz
-
-# renovate: datasource=github-releases packageName=itzg/rcon-cli
-ARG RCON_CLI_VERSION=1.7.5
-RUN easy-add --var os=${TARGETOS} --var arch=${TARGETARCH}${TARGETVARIANT} \
-  --var version=${RCON_CLI_VERSION} --var app=rcon-cli --file {{.app}} \
-  --from ${GITHUB_BASEURL}/itzg/{{.app}}/releases/download/{{.version}}/{{.app}}_{{.version}}_{{.os}}_{{.arch}}.tar.gz
-
-# renovate: datasource=github-releases packageName=itzg/mc-monitor
-ARG MC_MONITOR_VERSION=0.16.6
-RUN easy-add --var os=${TARGETOS} --var arch=${TARGETARCH}${TARGETVARIANT} \
-  --var version=${MC_MONITOR_VERSION} --var app=mc-monitor --file {{.app}} \
-  --from ${GITHUB_BASEURL}/itzg/{{.app}}/releases/download/{{.version}}/{{.app}}_{{.version}}_{{.os}}_{{.arch}}.tar.gz
-
-# renovate: datasource=github-releases packageName=itzg/mc-server-runner
-ARG MC_SERVER_RUNNER_VERSION=1.14.7
-RUN easy-add --var os=${TARGETOS} --var arch=${TARGETARCH}${TARGETVARIANT} \
-  --var version=${MC_SERVER_RUNNER_VERSION} --var app=mc-server-runner --file {{.app}} \
-  --from ${GITHUB_BASEURL}/itzg/{{.app}}/releases/download/{{.version}}/{{.app}}_{{.version}}_{{.os}}_{{.arch}}.tar.gz
+# RISC-V bootstrap: upstream uses prebuilt Go tools here. Until those tools are
+# published for linux/riscv64, install conservative shims so the vanilla path can
+# run and unsupported operational features fail explicitly.
+COPY files/riscv64-tools/* /usr/local/bin/
+RUN chmod 0755 /usr/local/bin/mc-server-runner /usr/local/bin/mc-monitor /usr/local/bin/rcon-cli /usr/local/bin/restify
 
 # renovate: datasource=github-releases packageName=itzg/mc-image-helper versioning=loose
 ARG MC_HELPER_VERSION=1.60.1
@@ -72,18 +50,17 @@ STOPSIGNAL SIGTERM
 # End user MUST set EULA and change RCON_PASSWORD
 ENV TYPE=VANILLA VERSION=LATEST EULA="" UID=1000 GID=1000 LC_ALL=en_US.UTF-8
 
-COPY --chmod=755 scripts/start* /image/scripts/
+COPY scripts/start* /image/scripts/
 
 # Backward compatible shim for those with legacy entrypoint
-COPY --chmod=755 <<EOF /start
-#!/bin/bash
-exec /image/scripts/start
-EOF
+RUN printf '%s\n' '#!/bin/bash' 'exec /image/scripts/start "$@"' > /start \
+  && chmod 0755 /start
 
-COPY --chmod=755 scripts/auto/* /image/scripts/auto/
-COPY --chmod=755 scripts/shims/* /image/scripts/shims/
-RUN ln -s /image/scripts/shims/* /usr/local/bin/
-COPY --chmod=755 files/* /image/
+COPY scripts/auto/* /image/scripts/auto/
+COPY scripts/shims/* /image/scripts/shims/
+COPY files/* /image/
+RUN chmod 0755 /image/scripts/start* /image/scripts/auto/* /image/scripts/shims/* \
+  && ln -s /image/scripts/shims/* /usr/local/bin/
 
 RUN curl -fsSL -o /image/Log4jPatcher.jar https://github.com/CreeperHost/Log4jPatcher/releases/download/v1.0.1/Log4jPatcher-1.0.1.jar
 
@@ -95,8 +72,5 @@ HEALTHCHECK --start-period=2m --retries=2 --interval=30s CMD mc-health
 ARG BUILDTIME=local
 ARG VERSION=local
 ARG REVISION=local
-COPY <<EOF /etc/image.properties
-buildtime=${BUILDTIME}
-version=${VERSION}
-revision=${REVISION}
-EOF
+RUN printf 'buildtime=%s\nversion=%s\nrevision=%s\n' \
+  "$BUILDTIME" "$VERSION" "$REVISION" > /etc/image.properties

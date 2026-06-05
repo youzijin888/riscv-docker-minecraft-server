@@ -1,44 +1,167 @@
-[![Docker Pulls](https://img.shields.io/docker/pulls/itzg/minecraft-server.svg?logo=docker)](https://hub.docker.com/r/itzg/minecraft-server/)
-[![Docker Stars](https://img.shields.io/docker/stars/itzg/minecraft-server.svg?logo=docker)](https://hub.docker.com/r/itzg/minecraft-server/)
-[![GitHub Issues](https://img.shields.io/github/issues-raw/itzg/docker-minecraft-server.svg)](https://github.com/itzg/docker-minecraft-server/issues)
-[![Discord](https://img.shields.io/discord/660567679458869252?label=Discord&logo=discord)](https://discord.gg/DXfKpjB)
-[![Build and Publish](https://github.com/itzg/docker-minecraft-server/actions/workflows/build.yml/badge.svg)](https://github.com/itzg/docker-minecraft-server/actions/workflows/build.yml)
-[![](https://img.shields.io/badge/Donate-Buy%20me%20a%20coffee-orange.svg)](https://www.buymeacoffee.com/itzg)
-[![Documentation Status](https://readthedocs.org/projects/docker-minecraft-server/badge/?version=latest)](https://docker-minecraft-server.readthedocs.io/en/latest/?badge=latest)
+# RISC-V Minecraft Server Docker Image
 
- [![Read the docs](docs/img/banner-docs.png)](https://docker-minecraft-server.readthedocs.io/)
+Experimental `linux/riscv64` port of
+[`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server).
 
-There you will find things like
-- [Quick start with Docker Compose](https://docker-minecraft-server.readthedocs.io/en/latest/#using-docker-compose)
-- Running [different versions of Minecraft](https://docker-minecraft-server.readthedocs.io/en/latest/versions/minecraft/) and using [various server types](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/) for Java Edition
-- [Setting server properties via container environment variables](https://docker-minecraft-server.readthedocs.io/en/latest/configuration/server-properties/)
-- [Managing mods and plugins with automated downloads and cleanup](https://docker-minecraft-server.readthedocs.io/en/latest/mods-and-plugins/)
-- [Using various modpack providers/platforms](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/)
-- ...and much more
+This fork keeps the upstream Docker entrypoint structure and focuses on making
+Minecraft Java Edition servers run on RISC-V boards. The first working targets
+are Vanilla and Paper.
 
-There are also many examples located in [the examples directory](examples) of this repo.
+## Status
 
-This image only supports Java edition natively; however, if looking for a server that is compatible with Bedrock edition, then use [itzg/minecraft-bedrock-server](https://github.com/itzg/docker-minecraft-bedrock-server) or [refer to this section](https://docker-minecraft-server.readthedocs.io/en/latest/misc/examples/#bedrock-compatible-server) to add Bedrock compatibility to a Java edition server.
+| Feature | Status | Notes |
+| --- | --- | --- |
+| `linux/riscv64` image build | Tested | Built on RevyOS/Debian trixie |
+| Java runtime | Tested | `riscv64/eclipse-temurin:25-jre` |
+| `TYPE=VANILLA` | Tested | Starts and persists `/data` |
+| `TYPE=PAPER` | Tested | Downloads and starts Paper `26.1.2-69` |
+| `ONLINE_MODE=false` | Tested | Useful for LAN/offline testing |
+| UID/GID demotion | Tested | Minecraft process runs as uid/gid `1000` |
+| RCON server | Partial | Minecraft RCON starts, `rcon-cli` is still a shim |
+| Healthcheck | Partial | Uses a temporary RISC-V shim |
+| Auto-pause/auto-stop | Not ready | Depends on missing helper tools |
+| Forge/Fabric/modpacks | Not tested | Future work |
 
-[![Sponsors](docs/img/banner-sponsors.png)](#sponsors)
+## Important RISC-V Runtime Note
 
-<a name="sponsors"></a>
+Current RISC-V Docker setups may block the Java instruction-cache flush syscall.
+Run the container with:
 
-<a href="https://spawnbox.app"><img src="https://spawnbox.app/favicon-48x48.png" alt="SpawnBox logo" width="48" align="left" /></a>
+```yaml
+security_opt:
+  - seccomp=unconfined
+```
 
-<a href="https://spawnbox.app"><b>SpawnBox</b></a> - Powered by <code>itzg/minecraft-server</code>, it's a Windows desktop app for parents, teens, and friend groups who want a Minecraft server on their own PC without learning Docker, WSL2, or networking.
+Without that setting, Java can fail with:
 
-<br clear="left" />
+```text
+RISCV_FLUSH_ICACHE not available
+Unable to synchronize I-cache
+```
 
-<a href="https://server.pro"><img src="https://server.pro/s/img/logo-short-192.png" alt="Server.pro logo" width="48" align="left" /></a>
+## Quick Start
 
-<a href="https://server.pro"><b>Server.pro</b></a> - A game server hosting platform offering one-click Minecraft server deployment powered by <code>itzg/minecraft-server</code>, with global locations and an easy-to-use control panel.
+Build the local image:
 
-<br clear="left" />
+```bash
+sudo ./build-riscv64-image.sh
+```
 
-<!-- additional sponsors repeat the pattern above: floated logo + blurb + clear-left break -->
-<!-- logo image preferrably hosted on an external, stable site at a size of 48x48px -->
-<!-- link to sponsor site -->
-<!-- one or two line summary ideally with a mention of image integration -->
+Run with Docker Compose v1:
 
-[and more...](https://github.com/sponsors/itzg)
+```bash
+sudo docker-compose up -d
+sudo docker-compose logs -f
+```
+
+Run with Docker Compose v2:
+
+```bash
+sudo docker compose up -d
+sudo docker compose logs -f
+```
+
+The bundled compose file currently starts Paper:
+
+```yaml
+environment:
+  EULA: "true"
+  TYPE: "PAPER"
+  VERSION: "LATEST"
+  MEMORY: "2G"
+  ONLINE_MODE: "false"
+```
+
+To use Vanilla instead:
+
+```yaml
+TYPE: "VANILLA"
+```
+
+## Docker Run
+
+If Docker Compose is not installed:
+
+```bash
+sudo docker run -d --name mc-riscv \
+  -p 25565:25565 \
+  --security-opt seccomp=unconfined \
+  -e EULA=TRUE \
+  -e TYPE=PAPER \
+  -e VERSION=LATEST \
+  -e ONLINE_MODE=false \
+  -e MEMORY=2G \
+  -v "$PWD/data:/data" \
+  riscv64-minecraft-server:local
+```
+
+Follow logs:
+
+```bash
+sudo docker logs -f mc-riscv
+```
+
+The server is ready when the log shows:
+
+```text
+Done (...)! For help, type "help"
+```
+
+## Configuration
+
+This fork preserves the upstream environment-variable model where possible.
+Common variables:
+
+| Variable | Example | Meaning |
+| --- | --- | --- |
+| `EULA` | `TRUE` | Required to accept the Minecraft EULA |
+| `TYPE` | `VANILLA`, `PAPER` | Server type |
+| `VERSION` | `LATEST`, `26.1.2` | Minecraft version |
+| `MEMORY` | `2G` | Initial and max heap |
+| `ONLINE_MODE` | `true`, `false` | Mojang account authentication |
+| `UID` / `GID` | `1000` | Runtime user and group |
+
+`ONLINE_MODE=false` is convenient for LAN testing, but it disables username
+authentication. Avoid exposing an offline-mode server directly to the public
+internet.
+
+## Data
+
+Minecraft data is stored in `/data`.
+
+With the included compose file, Docker stores it in the named volume:
+
+```text
+docker-minecraft-server-riscv_data
+```
+
+Stop the server without deleting data:
+
+```bash
+sudo docker-compose down
+```
+
+Delete the server data too:
+
+```bash
+sudo docker-compose down -v
+```
+
+## Upstream
+
+This project is derived from
+[`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server)
+and keeps its Apache-2.0 license.
+
+See [UPSTREAM.md](UPSTREAM.md) for the RISC-V patch boundary and current
+differences from upstream.
+
+## Roadmap
+
+- Replace temporary `files/riscv64-tools/` shims with real `linux/riscv64`
+  builds of upstream helper tools
+- Restore full RCON CLI and healthcheck behavior
+- Validate plugins on Paper
+- Validate Fabric with server-side optimization mods
+- Validate Forge/NeoForge and modpack flows
+- Add published image build workflow for `linux/riscv64`
