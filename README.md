@@ -156,6 +156,29 @@ and keeps its Apache-2.0 license.
 See [UPSTREAM.md](UPSTREAM.md) for the RISC-V patch boundary and current
 differences from upstream.
 
+## Releases
+
+This repository currently focuses on source builds and local RISC-V validation.
+Published multi-arch image and GitHub Release workflows are still on the
+roadmap. Until then, build the image locally with `./build-riscv64-image.sh`.
+
+## Contributing
+
+RISC-V validation reports and small compatibility fixes are welcome. Please see
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, especially if
+the change affects upstream parity or helper-tool shims.
+
+## Security
+
+Do not expose an `ONLINE_MODE=false` server to the public internet. For security
+reports about this RISC-V fork, see [SECURITY.md](SECURITY.md).
+
+## License
+
+This fork is distributed under the [Apache License 2.0](LICENSE), matching the
+upstream project. Minecraft, Paper, Java runtimes, and downloaded third-party
+server components remain subject to their own licenses and terms.
+
 ## Roadmap
 
 - Replace temporary `files/riscv64-tools/` shims with real `linux/riscv64`
